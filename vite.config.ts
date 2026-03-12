@@ -7,9 +7,8 @@ export default defineConfig({
     port: 3002,
     proxy: {
       '/api': {
-        target: 'http://localhost:3000',
+        target: 'https://demo-chat.docs.bffless.app',
         changeOrigin: true,
-        rewrite: (path) => `/public/subdomain-alias/production${path}`,
       },
     },
   },

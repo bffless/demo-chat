@@ -1,21 +1,30 @@
 import { useChat } from '@ai-sdk/react';
-import { useRef, useEffect } from 'react';
+import { DefaultChatTransport } from 'ai';
+import { useState, useRef, useEffect, useMemo } from 'react';
+import ReactMarkdown from 'react-markdown';
 
 function App() {
+  const [inputValue, setInputValue] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const {
-    messages,
-    input,
-    setInput,
-    handleInputChange,
-    handleSubmit,
-    status,
-    error,
-    stop,
-  } = useChat({
-    api: '/api/chat',
+  // Memoize transport to avoid recreating on each render
+  const transport = useMemo(() => new DefaultChatTransport({ api: '/api/chat' }), []);
+
+  const chatResult = useChat({
+    transport,
   });
+
+  // Debug: log the chat result to help diagnose issues
+  useEffect(() => {
+    console.log('useChat result:', {
+      hasSendMessage: typeof chatResult.sendMessage === 'function',
+      hasStop: typeof chatResult.stop === 'function',
+      status: chatResult.status,
+      keys: Object.keys(chatResult),
+    });
+  }, [chatResult]);
+
+  const { messages, sendMessage, status, error, stop } = chatResult;
 
   const isStreaming = status === 'streaming';
   const isSubmitting = status === 'submitted';
@@ -26,17 +35,37 @@ function App() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const onFormSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || isLoading) return;
-    handleSubmit(e);
+    if (!inputValue.trim() || isLoading) return;
+
+    if (typeof sendMessage !== 'function') {
+      console.error('sendMessage is not a function. Chat result:', chatResult);
+      alert('Chat not initialized properly. Check console for details.');
+      return;
+    }
+
+    const message = inputValue;
+    setInputValue('');
+    await sendMessage({ text: message });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      onFormSubmit(e);
+      handleSubmit(e);
     }
+  };
+
+  // Helper to get text content from message parts
+  const getMessageText = (message: (typeof messages)[0]) => {
+    if (!message.parts || message.parts.length === 0) {
+      return '';
+    }
+    return message.parts
+      .filter((part) => part.type === 'text')
+      .map((part) => (part as { type: 'text'; text: string }).text)
+      .join('');
   };
 
   return (
@@ -51,17 +80,9 @@ function App() {
       <div style={styles.chatContainer}>
         {/* Status Bar */}
         <div style={styles.statusBar}>
-          {isStreaming && (
-            <span style={styles.statusBadge}>Streaming...</span>
-          )}
-          {isSubmitting && (
-            <span style={styles.statusBadgeUpdating}>Sending...</span>
-          )}
-          {error && (
-            <span style={styles.statusBadgeError}>
-              Error: {error.message}
-            </span>
-          )}
+          {isStreaming && <span style={styles.statusBadge}>Streaming...</span>}
+          {isSubmitting && <span style={styles.statusBadgeUpdating}>Sending...</span>}
+          {error && <span style={styles.statusBadgeError}>Error: {error.message}</span>}
           {status === 'ready' && messages.length > 0 && (
             <span style={styles.statusBadgeReady}>Ready</span>
           )}
@@ -71,26 +92,24 @@ function App() {
         <div style={styles.messagesArea}>
           {messages.length === 0 ? (
             <div style={styles.emptyState}>
-              <p style={styles.emptyStateText}>
-                Start a conversation by typing a message below.
-              </p>
+              <p style={styles.emptyStateText}>Start a conversation by typing a message below.</p>
               <div style={styles.suggestions}>
                 <p style={styles.suggestionsTitle}>Try asking:</p>
                 <button
                   style={styles.suggestionButton}
-                  onClick={() => setInput('What is React?')}
+                  onClick={() => setInputValue('What is React?')}
                 >
                   What is React?
                 </button>
                 <button
                   style={styles.suggestionButton}
-                  onClick={() => setInput('Explain TypeScript in simple terms')}
+                  onClick={() => setInputValue('Explain TypeScript in simple terms')}
                 >
                   Explain TypeScript in simple terms
                 </button>
                 <button
                   style={styles.suggestionButton}
-                  onClick={() => setInput('Write a haiku about coding')}
+                  onClick={() => setInputValue('Write a haiku about coding')}
                 >
                   Write a haiku about coding
                 </button>
@@ -103,28 +122,49 @@ function App() {
                   key={message.id}
                   style={{
                     ...styles.messageWrapper,
-                    justifyContent:
-                      message.role === 'user' ? 'flex-end' : 'flex-start',
+                    justifyContent: message.role === 'user' ? 'flex-end' : 'flex-start',
                   }}
                 >
                   <div
                     style={{
                       ...styles.message,
-                      ...(message.role === 'user'
-                        ? styles.userMessage
-                        : styles.assistantMessage),
+                      ...(message.role === 'user' ? styles.userMessage : styles.assistantMessage),
                     }}
                   >
                     <div style={styles.messageRole}>
                       {message.role === 'user' ? 'You' : 'Assistant'}
                     </div>
                     <div style={styles.messageContent}>
-                      {message.parts?.map((part, index) => {
-                        if (part.type === 'text') {
-                          return <span key={index}>{part.text}</span>;
-                        }
-                        return null;
-                      }) ?? message.content}
+                      {message.role === 'assistant' ? (
+                        <ReactMarkdown
+                          components={{
+                            // Custom styling for markdown elements
+                            p: ({ children }) => <p style={{ margin: '0 0 0.5em 0' }}>{children}</p>,
+                            h1: ({ children }) => <h1 style={{ fontSize: '1.5em', fontWeight: 'bold', margin: '0.5em 0' }}>{children}</h1>,
+                            h2: ({ children }) => <h2 style={{ fontSize: '1.3em', fontWeight: 'bold', margin: '0.5em 0' }}>{children}</h2>,
+                            h3: ({ children }) => <h3 style={{ fontSize: '1.1em', fontWeight: 'bold', margin: '0.5em 0' }}>{children}</h3>,
+                            ul: ({ children }) => <ul style={{ margin: '0.5em 0', paddingLeft: '1.5em' }}>{children}</ul>,
+                            ol: ({ children }) => <ol style={{ margin: '0.5em 0', paddingLeft: '1.5em' }}>{children}</ol>,
+                            li: ({ children }) => <li style={{ margin: '0.25em 0' }}>{children}</li>,
+                            code: ({ className, children }) => {
+                              const isInline = !className;
+                              return isInline ? (
+                                <code style={{ background: '#e0e0e0', padding: '0.1em 0.3em', borderRadius: '3px', fontSize: '0.9em' }}>{children}</code>
+                              ) : (
+                                <code style={{ display: 'block', background: '#1e1e1e', color: '#d4d4d4', padding: '0.75em', borderRadius: '6px', fontSize: '0.85em', overflowX: 'auto' }}>{children}</code>
+                              );
+                            },
+                            pre: ({ children }) => <pre style={{ margin: '0.5em 0' }}>{children}</pre>,
+                            strong: ({ children }) => <strong style={{ fontWeight: 'bold' }}>{children}</strong>,
+                            em: ({ children }) => <em style={{ fontStyle: 'italic' }}>{children}</em>,
+                            blockquote: ({ children }) => <blockquote style={{ borderLeft: '3px solid #ccc', paddingLeft: '1em', margin: '0.5em 0', color: '#666' }}>{children}</blockquote>,
+                          }}
+                        >
+                          {getMessageText(message)}
+                        </ReactMarkdown>
+                      ) : (
+                        getMessageText(message)
+                      )}
                     </div>
                   </div>
                 </div>
@@ -135,11 +175,11 @@ function App() {
         </div>
 
         {/* Input Area */}
-        <form onSubmit={onFormSubmit} style={styles.inputArea}>
+        <form onSubmit={handleSubmit} style={styles.inputArea}>
           <div style={styles.inputWrapper}>
             <textarea
-              value={input}
-              onChange={handleInputChange}
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Type your message..."
               style={styles.input}
@@ -148,20 +188,16 @@ function App() {
             />
             <div style={styles.inputActions}>
               {isLoading ? (
-                <button
-                  type="button"
-                  onClick={stop}
-                  style={styles.stopButton}
-                >
+                <button type="button" onClick={() => stop()} style={styles.stopButton}>
                   Stop
                 </button>
               ) : (
                 <button
                   type="submit"
-                  disabled={!input.trim()}
+                  disabled={!inputValue.trim()}
                   style={{
                     ...styles.sendButton,
-                    opacity: input.trim() ? 1 : 0.5,
+                    opacity: inputValue.trim() ? 1 : 0.5,
                   }}
                 >
                   Send
@@ -169,16 +205,13 @@ function App() {
               )}
             </div>
           </div>
-          <p style={styles.hint}>
-            Press Enter to send, Shift+Enter for new line
-          </p>
+          <p style={styles.hint}>Press Enter to send, Shift+Enter for new line</p>
         </form>
       </div>
 
       <footer style={styles.footer}>
         <p>
-          This demo uses <code>useChat</code> from the AI SDK to stream
-          responses from the backend.
+          This demo uses <code>useChat</code> from the AI SDK to stream responses from the backend.
         </p>
       </footer>
     </div>
@@ -329,8 +362,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   messageContent: {
     fontSize: '0.95rem',
-    lineHeight: '1.5',
-    whiteSpace: 'pre-wrap',
+    lineHeight: '1.6',
     wordBreak: 'break-word',
   },
   inputArea: {
