@@ -1,10 +1,21 @@
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
+
+interface RateLimitState {
+  isLimited: boolean;
+  retryAfter: number;
+  message: string;
+}
 
 function App() {
   const [inputValue, setInputValue] = useState('');
+  const [rateLimit, setRateLimit] = useState<RateLimitState>({
+    isLimited: false,
+    retryAfter: 0,
+    message: '',
+  });
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Memoize transport to avoid recreating on each render
@@ -30,6 +41,57 @@ function App() {
   const isSubmitting = status === 'submitted';
   const isLoading = isStreaming || isSubmitting;
 
+  // Parse rate limit errors
+  const parseRateLimitError = useCallback((err: Error | undefined) => {
+    if (!err) return null;
+
+    try {
+      // The error message might contain the JSON response
+      const match = err.message.match(/\{[\s\S]*\}/);
+      if (match) {
+        const parsed = JSON.parse(match[0]);
+        if (parsed.code === 'RATE_LIMIT_EXCEEDED' && parsed.details?.retryAfter) {
+          return {
+            retryAfter: parsed.details.retryAfter,
+            message: parsed.message || 'Rate limit exceeded',
+          };
+        }
+      }
+    } catch {
+      // Not a rate limit error or couldn't parse
+    }
+    return null;
+  }, []);
+
+  // Handle rate limit errors
+  useEffect(() => {
+    const rateLimitInfo = parseRateLimitError(error);
+    if (rateLimitInfo) {
+      setRateLimit({
+        isLimited: true,
+        retryAfter: rateLimitInfo.retryAfter,
+        message: rateLimitInfo.message,
+      });
+    }
+  }, [error, parseRateLimitError]);
+
+  // Countdown timer for rate limit
+  useEffect(() => {
+    if (!rateLimit.isLimited || rateLimit.retryAfter <= 0) return;
+
+    const interval = setInterval(() => {
+      setRateLimit((prev) => {
+        const newRetryAfter = prev.retryAfter - 1;
+        if (newRetryAfter <= 0) {
+          return { isLimited: false, retryAfter: 0, message: '' };
+        }
+        return { ...prev, retryAfter: newRetryAfter };
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [rateLimit.isLimited, rateLimit.retryAfter]);
+
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -37,7 +99,7 @@ function App() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputValue.trim() || isLoading) return;
+    if (!inputValue.trim() || isLoading || rateLimit.isLimited) return;
 
     if (typeof sendMessage !== 'function') {
       console.error('sendMessage is not a function. Chat result:', chatResult);
@@ -48,6 +110,13 @@ function App() {
     const message = inputValue;
     setInputValue('');
     await sendMessage({ text: message });
+  };
+
+  // Format seconds into mm:ss
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -82,8 +151,16 @@ function App() {
         <div style={styles.statusBar}>
           {isStreaming && <span style={styles.statusBadge}>Streaming...</span>}
           {isSubmitting && <span style={styles.statusBadgeUpdating}>Sending...</span>}
-          {error && <span style={styles.statusBadgeError}>Error: {error.message}</span>}
-          {status === 'ready' && messages.length > 0 && (
+          {rateLimit.isLimited ? (
+            <span style={styles.statusBadgeRateLimit}>
+              Rate limited - try again in {formatTime(rateLimit.retryAfter)}
+            </span>
+          ) : (
+            error && !parseRateLimitError(error) && (
+              <span style={styles.statusBadgeError}>Error: {error.message}</span>
+            )
+          )}
+          {status === 'ready' && messages.length > 0 && !rateLimit.isLimited && (
             <span style={styles.statusBadgeReady}>Ready</span>
           )}
         </div>
@@ -181,10 +258,10 @@ function App() {
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Type your message..."
+              placeholder={rateLimit.isLimited ? `Rate limited - ${formatTime(rateLimit.retryAfter)} remaining...` : "Type your message..."}
               style={styles.input}
               rows={1}
-              disabled={isLoading}
+              disabled={isLoading || rateLimit.isLimited}
             />
             <div style={styles.inputActions}>
               {isLoading ? (
@@ -194,10 +271,10 @@ function App() {
               ) : (
                 <button
                   type="submit"
-                  disabled={!inputValue.trim()}
+                  disabled={!inputValue.trim() || rateLimit.isLimited}
                   style={{
                     ...styles.sendButton,
-                    opacity: inputValue.trim() ? 1 : 0.5,
+                    opacity: inputValue.trim() && !rateLimit.isLimited ? 1 : 0.5,
                   }}
                 >
                   Send
@@ -289,6 +366,14 @@ const styles: Record<string, React.CSSProperties> = {
     padding: '4px 12px',
     borderRadius: '12px',
     fontSize: '0.8rem',
+  },
+  statusBadgeRateLimit: {
+    background: '#fef3c7',
+    color: '#b45309',
+    padding: '4px 12px',
+    borderRadius: '12px',
+    fontSize: '0.8rem',
+    fontWeight: '500',
   },
   messagesArea: {
     flex: 1,
