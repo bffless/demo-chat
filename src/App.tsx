@@ -1,4 +1,4 @@
-import { useChat } from '@ai-sdk/react';
+import { useChat, UIMessage } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
@@ -10,6 +10,62 @@ interface RateLimitState {
   message: string;
 }
 
+// Generate a unique conversation ID
+function generateConversationId(): string {
+  return `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+}
+
+// Extract conversation ID from URL path (/chat/:id)
+function getConversationIdFromUrl(): string | null {
+  const match = window.location.pathname.match(/^\/chat\/([^/]+)$/);
+  return match ? match[1] : null;
+}
+
+// Backend message format
+interface BackendMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  tokens_used?: number;
+  conversation_id: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Fetch existing conversation messages
+async function fetchConversationMessages(conversationId: string): Promise<UIMessage[]> {
+  try {
+    const response = await fetch(`/api/chat?conversationId=${encodeURIComponent(conversationId)}`);
+    if (!response.ok) {
+      if (response.status === 404) {
+        // Conversation not found - this is fine, start fresh
+        return [];
+      }
+      throw new Error(`Failed to fetch conversation: ${response.statusText}`);
+    }
+    const result = await response.json();
+
+    if (!result.success || !Array.isArray(result.data)) {
+      return [];
+    }
+
+    // Transform backend messages to UIMessage format
+    // Sort by createdAt ascending (oldest first) since backend may return in different order
+    const sortedMessages = [...result.data].sort(
+      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    );
+
+    return sortedMessages.map((msg: BackendMessage): UIMessage => ({
+      id: msg.id,
+      role: msg.role,
+      parts: [{ type: 'text', text: msg.content }],
+    }));
+  } catch (error) {
+    console.error('Error fetching conversation:', error);
+    return [];
+  }
+}
+
 function App() {
   const [inputValue, setInputValue] = useState('');
   const [rateLimit, setRateLimit] = useState<RateLimitState>({
@@ -17,14 +73,53 @@ function App() {
     retryAfter: 0,
     message: '',
   });
+  const [initialMessages, setInitialMessages] = useState<UIMessage[]>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const hasUpdatedUrl = useRef(false);
+
+  // Get or generate conversation ID
+  const [conversationId] = useState<string>(() => {
+    const urlId = getConversationIdFromUrl();
+    if (urlId) {
+      return urlId;
+    }
+    // Generate new ID but don't update URL yet - wait for first message
+    return generateConversationId();
+  });
+
+  // Load existing messages on mount if URL has conversation ID
+  useEffect(() => {
+    const urlId = getConversationIdFromUrl();
+    if (urlId) {
+      // URL has conversation ID - fetch messages
+      fetchConversationMessages(urlId).then((messages) => {
+        setInitialMessages(messages);
+        setIsLoadingHistory(false);
+        hasUpdatedUrl.current = true; // URL already has ID
+      });
+    } else {
+      // New conversation - no messages to load
+      setIsLoadingHistory(false);
+    }
+  }, []);
 
   // Memoize transport to avoid recreating on each render
   const transport = useMemo(() => new DefaultChatTransport({ api: '/api/chat' }), []);
 
   const chatResult = useChat({
+    id: conversationId,
     transport,
   });
+
+  const { messages, sendMessage, status, error, stop, setMessages } = chatResult;
+
+  // Set initial messages when loaded from backend
+  useEffect(() => {
+    if (initialMessages.length > 0 && messages.length === 0) {
+      setMessages(initialMessages);
+    }
+  }, [initialMessages, messages.length, setMessages]);
 
   // Debug: log the chat result to help diagnose issues
   useEffect(() => {
@@ -35,8 +130,6 @@ function App() {
       keys: Object.keys(chatResult),
     });
   }, [chatResult]);
-
-  const { messages, sendMessage, status, error, stop } = chatResult;
 
   const isStreaming = status === 'streaming';
   const isSubmitting = status === 'submitted';
@@ -110,6 +203,12 @@ function App() {
       return;
     }
 
+    // Update URL on first message if not already updated
+    if (!hasUpdatedUrl.current) {
+      window.history.replaceState(null, '', `/chat/${conversationId}`);
+      hasUpdatedUrl.current = true;
+    }
+
     const message = inputValue;
     setInputValue('');
     await sendMessage({ text: message });
@@ -143,10 +242,25 @@ function App() {
   return (
     <div style={styles.container}>
       <header style={styles.header}>
-        <h1 style={styles.title}>BFFless Chat Demo</h1>
-        <p style={styles.subtitle}>
-          AI-powered assistant with skills
-        </p>
+        <div style={styles.headerRow}>
+          <div>
+            <h1 style={styles.title}>BFFless Chat Demo</h1>
+            <p style={styles.subtitle}>
+              AI-powered assistant with skills
+            </p>
+          </div>
+          {messages.length > 0 && (
+            <button
+              style={styles.newChatButton}
+              onClick={() => {
+                // Navigate to new chat (without conversation ID)
+                window.location.href = '/';
+              }}
+            >
+              New Chat
+            </button>
+          )}
+        </div>
       </header>
 
       <div style={styles.chatContainer}>
@@ -170,7 +284,11 @@ function App() {
 
         {/* Messages Area */}
         <div style={styles.messagesArea}>
-          {messages.length === 0 ? (
+          {isLoadingHistory ? (
+            <div style={styles.emptyState}>
+              <p style={styles.emptyStateText}>Loading conversation...</p>
+            </div>
+          ) : messages.length === 0 ? (
             <div style={styles.emptyState}>
               <p style={styles.emptyStateText}>Start a conversation by typing a message below.</p>
               <div style={styles.suggestions}>
@@ -272,7 +390,7 @@ function App() {
               placeholder={rateLimit.isLimited ? `Rate limited - ${formatTime(rateLimit.retryAfter)} remaining...` : "Type your message..."}
               style={styles.input}
               rows={1}
-              disabled={isLoading || rateLimit.isLimited}
+              disabled={isLoading || rateLimit.isLimited || isLoadingHistory}
             />
             <div style={styles.inputActions}>
               {isLoading ? (
@@ -316,8 +434,13 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: 'column',
   },
   header: {
-    textAlign: 'center',
     marginBottom: '24px',
+  },
+  headerRow: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    textAlign: 'center' as const,
   },
   title: {
     fontSize: '2rem',
@@ -327,6 +450,17 @@ const styles: Record<string, React.CSSProperties> = {
   subtitle: {
     color: '#666',
     fontSize: '1rem',
+  },
+  newChatButton: {
+    padding: '10px 20px',
+    background: '#f5f5f5',
+    border: '1px solid #ddd',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    fontSize: '0.9rem',
+    fontWeight: '500',
+    color: '#333',
+    transition: 'background 0.2s',
   },
   code: {
     background: '#e8e8e8',
