@@ -50,10 +50,12 @@ function App() {
       const match = err.message.match(/\{[\s\S]*\}/);
       if (match) {
         const parsed = JSON.parse(match[0]);
-        if (parsed.code === 'RATE_LIMIT_EXCEEDED' && parsed.details?.retryAfter) {
+        // Handle nested error structure: { success: false, error: { code, message, details } }
+        const errorObj = parsed.error || parsed;
+        if (errorObj.code === 'RATE_LIMIT_EXCEEDED' && errorObj.details?.retryAfter) {
           return {
-            retryAfter: parsed.details.retryAfter,
-            message: parsed.message || 'Rate limit exceeded',
+            retryAfter: errorObj.details.retryAfter,
+            message: errorObj.message || 'Rate limit exceeded',
           };
         }
       }
