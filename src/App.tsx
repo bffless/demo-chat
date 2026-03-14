@@ -10,11 +10,6 @@ interface RateLimitState {
   message: string;
 }
 
-// Generate a unique conversation ID
-function generateConversationId(): string {
-  return `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
-}
-
 // Extract conversation ID from URL path (/chat/:id)
 function getConversationIdFromUrl(): string | null {
   const match = window.location.pathname.match(/^\/chat\/([^/]+)$/);
@@ -78,22 +73,14 @@ function App() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const hasUpdatedUrl = useRef(false);
 
-  // Get or generate conversation ID
-  const [conversationId] = useState<string>(() => {
-    const urlId = getConversationIdFromUrl();
-    if (urlId) {
-      return urlId;
-    }
-    // Generate new ID but don't update URL yet - wait for first message
-    return generateConversationId();
-  });
+  // Get conversation ID from URL if loading existing conversation
+  const urlConversationId = getConversationIdFromUrl();
 
   // Load existing messages on mount if URL has conversation ID
   useEffect(() => {
-    const urlId = getConversationIdFromUrl();
-    if (urlId) {
+    if (urlConversationId) {
       // URL has conversation ID - fetch messages
-      fetchConversationMessages(urlId).then((messages) => {
+      fetchConversationMessages(urlConversationId).then((messages) => {
         setInitialMessages(messages);
         setIsLoadingHistory(false);
         hasUpdatedUrl.current = true; // URL already has ID
@@ -102,17 +89,26 @@ function App() {
       // New conversation - no messages to load
       setIsLoadingHistory(false);
     }
-  }, []);
+  }, [urlConversationId]);
 
   // Memoize transport to avoid recreating on each render
   const transport = useMemo(() => new DefaultChatTransport({ api: '/api/chat' }), []);
 
+  // Pass URL ID to useChat if loading existing conversation, otherwise let SDK generate
   const chatResult = useChat({
-    id: conversationId,
+    ...(urlConversationId ? { id: urlConversationId } : {}),
     transport,
   });
 
-  const { messages, sendMessage, status, error, stop, setMessages } = chatResult;
+  const { id: conversationId, messages, sendMessage, status, error, stop, setMessages } = chatResult;
+
+  // Update URL with SDK-generated ID on first message (for new chats)
+  useEffect(() => {
+    if (!hasUpdatedUrl.current && messages.length > 0 && conversationId) {
+      window.history.replaceState(null, '', `/chat/${conversationId}`);
+      hasUpdatedUrl.current = true;
+    }
+  }, [messages.length, conversationId]);
 
   // Set initial messages when loaded from backend
   useEffect(() => {
@@ -201,12 +197,6 @@ function App() {
       console.error('sendMessage is not a function. Chat result:', chatResult);
       alert('Chat not initialized properly. Check console for details.');
       return;
-    }
-
-    // Update URL on first message if not already updated
-    if (!hasUpdatedUrl.current) {
-      window.history.replaceState(null, '', `/chat/${conversationId}`);
-      hasUpdatedUrl.current = true;
     }
 
     const message = inputValue;
