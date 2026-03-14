@@ -45,3 +45,13 @@ jobs:
           base-path: /dist
           description: 'Chat Demo preview for PR #${{ github.event.pull_request.number }}'
           summary-title: Chat Demo Preview Summary
+
+      - name: Upload skills preview
+        uses: bffless/upload-artifact@v1
+        with:
+          path: .bffless
+          api-url: ${{ vars.ASSET_HOST_URL }}
+          api-key: ${{ secrets.ASSET_HOST_KEY }}
+          alias: preview
+          description: 'Skills preview for PR #${{ github.event.pull_request.number }}'
+          summary-title: Skills Preview

@@ -49,3 +49,13 @@ jobs:
           base-path: /dist
           description: 'Chat Demo production deploy for ${{ github.ref_name }}@${{ github.sha }}'
           summary-title: Chat Demo Production Deploy
+
+      - name: Upload skills to production
+        uses: bffless/upload-artifact@v1
+        with:
+          path: .bffless
+          api-url: ${{ vars.ASSET_HOST_URL }}
+          api-key: ${{ secrets.ASSET_HOST_KEY }}
+          alias: production
+          description: 'Skills for ${{ github.ref_name }}@${{ github.sha }}'
+          summary-title: Skills Upload
