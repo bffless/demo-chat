@@ -242,43 +242,40 @@ function App() {
   return (
     <div style={styles.container}>
       <header style={styles.header}>
-        <div style={styles.headerRow}>
-          <div>
-            <h1 style={styles.title}>BFFless Chat Demo</h1>
-            <p style={styles.subtitle}>
-              AI-powered assistant with skills
-            </p>
-          </div>
-          {messages.length > 0 && (
-            <button
-              style={styles.newChatButton}
-              onClick={() => {
-                // Navigate to new chat (without conversation ID)
-                window.location.href = '/';
-              }}
-            >
-              New Chat
-            </button>
-          )}
-        </div>
+        <h1 style={styles.title}>BFFless Chat Demo</h1>
+        <p style={styles.subtitle}>
+          AI-powered assistant with skills
+        </p>
       </header>
 
       <div style={styles.chatContainer}>
         {/* Status Bar */}
         <div style={styles.statusBar}>
-          {isStreaming && <span style={styles.statusBadge}>Streaming...</span>}
-          {isSubmitting && <span style={styles.statusBadgeUpdating}>Sending...</span>}
-          {rateLimit.isLimited ? (
-            <span style={styles.statusBadgeRateLimit}>
-              Rate limited - try again in {formatTime(rateLimit.retryAfter)}
-            </span>
-          ) : (
-            error && !parseRateLimitError(error) && (
-              <span style={styles.statusBadgeError}>Error: {error.message}</span>
-            )
-          )}
-          {status === 'ready' && messages.length > 0 && !rateLimit.isLimited && (
-            <span style={styles.statusBadgeReady}>Ready</span>
+          <div style={styles.statusBadges}>
+            {isStreaming && <span style={styles.statusBadge}>Streaming...</span>}
+            {isSubmitting && <span style={styles.statusBadgeUpdating}>Sending...</span>}
+            {rateLimit.isLimited ? (
+              <span style={styles.statusBadgeRateLimit}>
+                Rate limited - try again in {formatTime(rateLimit.retryAfter)}
+              </span>
+            ) : (
+              error && !parseRateLimitError(error) && (
+                <span style={styles.statusBadgeError}>Error: {error.message}</span>
+              )
+            )}
+            {status === 'ready' && messages.length > 0 && !rateLimit.isLimited && (
+              <span style={styles.statusBadgeReady}>Ready</span>
+            )}
+          </div>
+          {messages.length > 0 && (
+            <button
+              style={styles.newChatButton}
+              onClick={() => {
+                window.location.href = '/';
+              }}
+            >
+              New Chat
+            </button>
           )}
         </div>
 
@@ -434,13 +431,8 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: 'column',
   },
   header: {
+    textAlign: 'center',
     marginBottom: '24px',
-  },
-  headerRow: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    textAlign: 'center' as const,
   },
   title: {
     fontSize: '2rem',
@@ -452,12 +444,12 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: '1rem',
   },
   newChatButton: {
-    padding: '10px 20px',
+    padding: '6px 12px',
     background: '#f5f5f5',
     border: '1px solid #ddd',
-    borderRadius: '8px',
+    borderRadius: '6px',
     cursor: 'pointer',
-    fontSize: '0.9rem',
+    fontSize: '0.8rem',
     fontWeight: '500',
     color: '#333',
     transition: 'background 0.2s',
@@ -483,6 +475,12 @@ const styles: Record<string, React.CSSProperties> = {
     borderBottom: '1px solid #eee',
     display: 'flex',
     alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  statusBadges: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
   },
   statusBadge: {
     background: '#e0e7ff',
