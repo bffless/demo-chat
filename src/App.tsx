@@ -2,6 +2,7 @@ import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 interface RateLimitState {
   isLimited: boolean;
@@ -142,9 +143,9 @@ function App() {
   return (
     <div style={styles.container}>
       <header style={styles.header}>
-        <h1 style={styles.title}>useChat Demo</h1>
+        <h1 style={styles.title}>BFFless Chat Demo</h1>
         <p style={styles.subtitle}>
-          AI chat powered by <code style={styles.code}>@ai-sdk/react</code>
+          AI-powered assistant with skills
         </p>
       </header>
 
@@ -176,21 +177,21 @@ function App() {
                 <p style={styles.suggestionsTitle}>Try asking:</p>
                 <button
                   style={styles.suggestionButton}
-                  onClick={() => setInputValue('What is React?')}
+                  onClick={() => setInputValue('What is BFFless?')}
                 >
-                  What is React?
+                  What is BFFless?
                 </button>
                 <button
                   style={styles.suggestionButton}
-                  onClick={() => setInputValue('Explain TypeScript in simple terms')}
+                  onClick={() => setInputValue('How do I set up proxy rules?')}
                 >
-                  Explain TypeScript in simple terms
+                  How do I set up proxy rules?
                 </button>
                 <button
                   style={styles.suggestionButton}
-                  onClick={() => setInputValue('Write a haiku about coding')}
+                  onClick={() => setInputValue('How does traffic splitting work?')}
                 >
-                  Write a haiku about coding
+                  How does traffic splitting work?
                 </button>
               </div>
             </div>
@@ -216,6 +217,7 @@ function App() {
                     <div style={styles.messageContent}>
                       {message.role === 'assistant' ? (
                         <ReactMarkdown
+                          remarkPlugins={[remarkGfm]}
                           components={{
                             // Custom styling for markdown elements
                             p: ({ children }) => <p style={{ margin: '0 0 0.5em 0' }}>{children}</p>,
@@ -237,6 +239,13 @@ function App() {
                             strong: ({ children }) => <strong style={{ fontWeight: 'bold' }}>{children}</strong>,
                             em: ({ children }) => <em style={{ fontStyle: 'italic' }}>{children}</em>,
                             blockquote: ({ children }) => <blockquote style={{ borderLeft: '3px solid #ccc', paddingLeft: '1em', margin: '0.5em 0', color: '#666' }}>{children}</blockquote>,
+                            // Table elements
+                            table: ({ children }) => <table style={{ borderCollapse: 'collapse', width: '100%', margin: '0.5em 0' }}>{children}</table>,
+                            thead: ({ children }) => <thead style={{ borderBottom: '2px solid #ddd' }}>{children}</thead>,
+                            tbody: ({ children }) => <tbody>{children}</tbody>,
+                            tr: ({ children }) => <tr style={{ borderBottom: '1px solid #eee' }}>{children}</tr>,
+                            th: ({ children }) => <th style={{ padding: '0.5em 0.75em', textAlign: 'left', fontWeight: 'bold', background: '#f5f5f5' }}>{children}</th>,
+                            td: ({ children }) => <td style={{ padding: '0.5em 0.75em' }}>{children}</td>,
                           }}
                         >
                           {getMessageText(message)}
