@@ -92,7 +92,10 @@ function App() {
   }, [urlConversationId]);
 
   // Memoize transport to avoid recreating on each render
-  const transport = useMemo(() => new DefaultChatTransport({ api: '/api/chat' }), []);
+  const transport = useMemo(() => new DefaultChatTransport({
+    api: '/api/chat',
+    body: { timezone: Intl.DateTimeFormat().resolvedOptions().timeZone },
+  }), []);
 
   // Pass URL ID to useChat if loading existing conversation, otherwise let SDK generate
   const chatResult = useChat({

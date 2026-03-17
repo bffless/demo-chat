@@ -29,7 +29,10 @@ export function ChatPanel({ onClose, onNewChat }: ChatPanelProps) {
   const [initialMessages, setInitialMessages] = useState<UIMessage[]>([]);
 
   const transport = useMemo(
-    () => new DefaultChatTransport({ api: "/api/chat" }),
+    () => new DefaultChatTransport({
+      api: "/api/chat",
+      body: { timezone: Intl.DateTimeFormat().resolvedOptions().timeZone },
+    }),
     []
   );
 
