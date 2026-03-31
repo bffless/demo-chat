@@ -8,6 +8,7 @@ export default defineConfig({
       input: {
         main: 'index.html',
         popup: 'popup/index.html',
+        embed: 'embed/index.html',
       },
     },
   },

@@ -16,5 +16,5 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src", "popup"]
+  "include": ["src", "popup", "embed"]
 }

@@ -1,39 +1,49 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
-import { useChat, type UIMessage } from "@ai-sdk/react";
-import { DefaultChatTransport } from "ai";
-import { ChatHeader } from "./ChatHeader";
-import { ChatMessages } from "./ChatMessages";
-import { ChatInput } from "./ChatInput";
-import type { BackendMessage, ChatStatus, SuggestionItem } from "./types";
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useChat, type UIMessage } from '@ai-sdk/react';
+import { DefaultChatTransport } from 'ai';
+import { ChatHeader } from './ChatHeader';
+import { ChatMessages } from './ChatMessages';
+import { ChatInput } from './ChatInput';
+import type { BackendMessage, ChatStatus, SuggestionItem } from './types';
 
-const STORAGE_KEY = "chat_conversation_id";
+const STORAGE_KEY = 'chat_conversation_id';
 
 const suggestions: SuggestionItem[] = [
-  { label: "What can you help me with?", prompt: "What can you help me with?" },
-  { label: "Tell me about this site", prompt: "Tell me about this site." },
-  { label: "How does this work?", prompt: "How does this chat feature work?" },
+  { label: 'What can you help me with?', prompt: 'What can you help me with?' },
+  { label: 'Tell me about this site', prompt: 'Tell me about this site.' },
+  {
+    label: 'Schedule a chat',
+    prompt: "I'd like to schedule a time to chat this week. What's available?",
+  },
 ];
+
+const DEFAULT_CONTAINER_CLASS =
+  'flex h-full flex-col rounded-2xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-700 dark:bg-zinc-900';
 
 interface ChatPanelProps {
   onClose: () => void;
   onNewChat: () => void;
+  containerClassName?: string;
 }
 
-export function ChatPanel({ onClose, onNewChat }: ChatPanelProps) {
+export function ChatPanel({ onClose, onNewChat, containerClassName }: ChatPanelProps) {
+  const containerClass = containerClassName ?? DEFAULT_CONTAINER_CLASS;
+  const isRounded = !containerClassName;
   const [conversationId, setConversationId] = useState<string | null>(() => {
     return localStorage.getItem(STORAGE_KEY);
   });
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState('');
   const [rateLimitCountdown, setRateLimitCountdown] = useState(0);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [initialMessages, setInitialMessages] = useState<UIMessage[]>([]);
 
   const transport = useMemo(
-    () => new DefaultChatTransport({
-      api: "/api/chat",
-      body: { timezone: Intl.DateTimeFormat().resolvedOptions().timeZone },
-    }),
-    []
+    () =>
+      new DefaultChatTransport({
+        api: '/api/chat',
+        body: { timezone: Intl.DateTimeFormat().resolvedOptions().timeZone },
+      }),
+    [],
   );
 
   const {
@@ -50,10 +60,10 @@ export function ChatPanel({ onClose, onNewChat }: ChatPanelProps) {
   });
 
   const status: ChatStatus = useMemo(() => {
-    if (rawStatus === "streaming") return "streaming";
-    if (rawStatus === "submitted") return "submitted";
-    if (rawStatus === "error") return "error";
-    return "ready";
+    if (rawStatus === 'streaming') return 'streaming';
+    if (rawStatus === 'submitted') return 'submitted';
+    if (rawStatus === 'error') return 'error';
+    return 'ready';
   }, [rawStatus]);
 
   // Save conversation ID when it changes
@@ -72,28 +82,23 @@ export function ChatPanel({ onClose, onNewChat }: ChatPanelProps) {
       setIsLoadingHistory(true);
       try {
         const response = await fetch(
-          `/api/chat?conversationId=${encodeURIComponent(conversationId)}`
+          `/api/chat?conversationId=${encodeURIComponent(conversationId)}`,
         );
         if (response.ok) {
           const result = await response.json();
-          if (
-            result.success &&
-            Array.isArray(result.data) &&
-            result.data.length > 0
-          ) {
+          if (result.success && Array.isArray(result.data) && result.data.length > 0) {
             const sortedMessages = [...result.data].sort(
               (a: BackendMessage, b: BackendMessage) =>
-                new Date(a.created_at || "").getTime() -
-                new Date(b.created_at || "").getTime()
+                new Date(a.created_at || '').getTime() - new Date(b.created_at || '').getTime(),
             );
             setInitialMessages(
               sortedMessages.map(
                 (msg: BackendMessage): UIMessage => ({
                   id: msg.id,
                   role: msg.role,
-                  parts: [{ type: "text", text: msg.content }],
-                })
-              )
+                  parts: [{ type: 'text', text: msg.content }],
+                }),
+              ),
             );
           }
         }
@@ -122,13 +127,10 @@ export function ChatPanel({ onClose, onNewChat }: ChatPanelProps) {
       if (match) {
         const parsed = JSON.parse(match[0]);
         const errorObj = parsed.error || parsed;
-        if (
-          errorObj.code === "RATE_LIMIT_EXCEEDED" &&
-          errorObj.details?.retryAfter
-        ) {
+        if (errorObj.code === 'RATE_LIMIT_EXCEEDED' && errorObj.details?.retryAfter) {
           return {
             retryAfter: errorObj.details.retryAfter,
-            message: errorObj.message || "Rate limit exceeded",
+            message: errorObj.message || 'Rate limit exceeded',
           };
         }
       }
@@ -157,11 +159,10 @@ export function ChatPanel({ onClose, onNewChat }: ChatPanelProps) {
   }, [rateLimitCountdown]);
 
   const handleSend = useCallback(async () => {
-    if (!input.trim() || status === "streaming" || rateLimitCountdown > 0)
-      return;
+    if (!input.trim() || status === 'streaming' || rateLimitCountdown > 0) return;
 
     const message = input;
-    setInput("");
+    setInput('');
     await sendMessage({ text: message });
   }, [input, status, rateLimitCountdown, sendMessage]);
 
@@ -171,13 +172,8 @@ export function ChatPanel({ onClose, onNewChat }: ChatPanelProps) {
 
   if (isLoadingHistory) {
     return (
-      <div className="flex h-full flex-col rounded-2xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-700 dark:bg-zinc-900">
-        <ChatHeader
-          status="ready"
-          hasMessages={false}
-          onNewChat={onNewChat}
-          onClose={onClose}
-        />
+      <div className={containerClass}>
+        <ChatHeader status="ready" hasMessages={false} onNewChat={onNewChat} onClose={onClose} rounded={isRounded} />
         <div className="flex flex-1 items-center justify-center">
           <div className="flex flex-col items-center gap-2">
             <div className="h-8 w-8 animate-spin rounded-full border-2 border-blue-500 border-t-transparent" />
@@ -191,12 +187,13 @@ export function ChatPanel({ onClose, onNewChat }: ChatPanelProps) {
   }
 
   return (
-    <div className="flex h-full flex-col rounded-2xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-700 dark:bg-zinc-900">
+    <div className={containerClass}>
       <ChatHeader
         status={status}
         hasMessages={messages.length > 0}
         onNewChat={onNewChat}
         onClose={onClose}
+        rounded={isRounded}
       />
       <div className="flex-1 overflow-y-auto">
         <ChatMessages

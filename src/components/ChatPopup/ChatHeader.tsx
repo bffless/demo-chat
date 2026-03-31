@@ -5,6 +5,7 @@ interface ChatHeaderProps {
   hasMessages: boolean;
   onNewChat: () => void;
   onClose: () => void;
+  rounded?: boolean;
 }
 
 function getStatusText(status: ChatStatus): string {
@@ -37,9 +38,10 @@ export function ChatHeader({
   hasMessages,
   onNewChat,
   onClose,
+  rounded = true,
 }: ChatHeaderProps) {
   return (
-    <div className="flex items-center justify-between border-b border-zinc-200 bg-white px-4 py-3 dark:border-zinc-700 dark:bg-zinc-900 rounded-t-2xl">
+    <div className={`flex items-center justify-between border-b border-zinc-200 bg-white px-4 py-3 dark:border-zinc-700 dark:bg-zinc-900${rounded ? ' rounded-t-2xl' : ''}`}>
       <div className="flex items-center gap-3">
         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900">
           {/* Chat icon */}

@@ -297,9 +297,9 @@ function App() {
                 </button>
                 <button
                   style={styles.suggestionButton}
-                  onClick={() => setInputValue('How does traffic splitting work?')}
+                  onClick={() => setInputValue("I'd like to schedule a time to chat this week. What's available?")}
                 >
-                  How does traffic splitting work?
+                  Schedule a chat
                 </button>
               </div>
             </div>
